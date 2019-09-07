@@ -4,11 +4,13 @@ import 'package:go_together/dao/home_dao.dart';
 import 'package:go_together/model/common_model.dart';
 import 'package:go_together/model/grid_nav_model.dart';
 import 'package:go_together/model/sales_box_model.dart';
-import 'dart:convert';
+import 'package:go_together/pages/search_page.dart';
 
 import 'package:go_together/widget/grid_nav_widget.dart';
+import 'package:go_together/widget/loading_container.dart';
 import 'package:go_together/widget/local_nav_widget.dart';
 import 'package:go_together/widget/sales_nav_widget.dart';
+import 'package:go_together/widget/search_bar.dart';
 import 'package:go_together/widget/sub_nav_widget.dart';
 
 const APPBAR_SCROLL_OFFSET = 100;
@@ -20,18 +22,15 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<CommonModel> localNavList = [];
+  List<CommonModel> bannerList = [];
   List<CommonModel> subNavList = [];
   GridNavModel gridNavModel;
   SalesBoxModel salesBox;
 
-  String _resultJson = '';
+  // 加载状态
+  bool _loading = true;
 
-  final List<String> _bannerUrls = [
-    'https://ss1.bdstatic.com/70cFuXSh_Q1YnxGkpoWK1HF6hhy/it/u=3300305952,1328708913&fm=27&gp=0.jpg',
-    'https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=1718395925,3485808025&fm=27&gp=0.jpg',
-    'https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=1080760116,732088640&fm=27&gp=0.jpg',
-    'https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=2509469443,1652062333&fm=27&gp=0.jpg'
-  ];
+  // 标题栏透明度
   double appBarAlpha = 0;
 
   _onScroll(offset) {
@@ -51,47 +50,56 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _handleRefresh();
   }
 
-  _loadData() async {
+  Future<Null> _handleRefresh() async {
     HomeDao.fetch().then((result) {
       setState(() {
-        _resultJson = json.encode(result.config);
         localNavList = result.localNavList;
         subNavList = result.subNavList;
         gridNavModel = result.gridNav;
         salesBox = result.salesBox;
+        bannerList = result.bannerList;
+
+        _loading = false;
       });
     }).catchError((e) {
+      print(e);
+
       setState(() {
-        _resultJson = e.toString();
+        _loading = false;
       });
     });
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color(0xfff2f2f2),
-      body: Stack(
-        children: <Widget>[
-          MediaQuery.removePadding(
-              removeTop: true,
-              context: context,
-              child: NotificationListener(
-                onNotification: (scrollNotification) {
-                  if (scrollNotification is ScrollUpdateNotification &&
-                      scrollNotification.depth == 0) {
-                    // 滚动且是列表滚动的时候
-                    _onScroll(scrollNotification.metrics.pixels);
-                  }
-                },
-                child: _listView,
-              )),
-          _appBar,
-        ],
-      ),
+      body: LoadingContainer(
+          isLoading: _loading,
+          child: Stack(
+            children: <Widget>[
+              MediaQuery.removePadding(
+                  removeTop: true,
+                  context: context,
+                  child: RefreshIndicator(
+                      onRefresh: _handleRefresh,
+                      child: NotificationListener(
+                        onNotification: (scrollNotification) {
+                          if (scrollNotification is ScrollUpdateNotification &&
+                              scrollNotification.depth == 0) {
+                            // 滚动且是列表滚动的时候
+                            _onScroll(scrollNotification.metrics.pixels);
+                          }
+                        },
+                        child: _listView,
+                      ))),
+              _appBar,
+            ],
+          )),
     );
   }
 
@@ -113,9 +121,14 @@ class _HomePageState extends State<HomePage> {
             decoration: BoxDecoration(
               color: Color.fromARGB((appBarAlpha * 255).toInt(), 255, 255, 255),
             ),
-            child: Padding(
-              padding: EdgeInsets.only(top: 20),
-              child: Text('首页'),
+            child: SearchBar(
+              searchBarType: appBarAlpha > 0.2
+                  ? SearchBarType.homeLight
+                  : SearchBarType.home,
+              inputBoxClick: _jumpToSearch,
+              speakClick: _jumpToSpeak,
+              defaultText: '网红打卡地 景点 酒店 美食',
+              leftButtonClick: () {},
             ),
           ),
         )
@@ -127,12 +140,12 @@ class _HomePageState extends State<HomePage> {
     return Container(
       height: 160,
       child: Swiper(
-        itemCount: _bannerUrls.length,
+        itemCount: bannerList.length,
         autoplay: true,
         itemBuilder: (BuildContext context, int index) {
           return GestureDetector(
             child: Image.network(
-              _bannerUrls[index],
+              bannerList[index].icon,
               fit: BoxFit.fill,
             ),
           );
@@ -160,17 +173,16 @@ class _HomePageState extends State<HomePage> {
         Container(
           child: SalesNav(salesBox: salesBox),
         ),
-        Container(
-          height: 160,
-          alignment: Alignment.center,
-          child: Text('4'),
-        ),
-        Container(
-          height: 160,
-          alignment: Alignment.center,
-          child: Text('5'),
-        )
       ],
     );
   }
+
+  _jumpToSearch() {
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => SearchPage(hintStr: '网红打卡地 景点 酒店 美食')));
+  }
+
+  _jumpToSpeak() {}
 }
